@@ -62,18 +62,25 @@ void renoOrCubic(int my_sock, char *renoOrCubic)
     }
 }
 
-#define RECEIVER_IP_ADDRESS "127.0.0.1"
-#define RECEIVER_PORT 8888      //TODO- receive this detauls from user
-
 int main(int argc, char *argv[])
 {
+    char *RECEIVER_IP_ADDRESS;
+    int RECEIVER_PORT;
     char *FIN = "I would like to end the connection please";
-    algoritm = argv[2];
-
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock == -1)
+    for (size_t i = 0; i < argc; i++)
     {
-        perror("socket");
+        if (!strcmp(argv[i], "-p"))
+        {
+            RECEIVER_PORT = atoi(argv[i + 1]);
+        }
+        if (!strcmp(argv[i], "-algo"))
+        {
+            algoritm = argv[i + 1];
+        }
+        if (!strcmp(argv[i], "-ip"))
+        {
+            RECEIVER_IP_ADDRESS = argv[i + 1];
+        }
     }
 
     printf("Creating the socket...\n");
@@ -83,6 +90,8 @@ int main(int argc, char *argv[])
     receiverAddress.sin_family = AF_INET;
     receiverAddress.sin_port = htons(RECEIVER_PORT);
     socklen_t algo_len = strlen(algoritm);
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
     setsockopt(sock, IPPROTO_TCP, TCP_CONGESTION, algoritm, algo_len);
     int rval = inet_pton(AF_INET, (const char *)RECEIVER_IP_ADDRESS, &receiverAddress.sin_addr);
     if (rval <= 0)

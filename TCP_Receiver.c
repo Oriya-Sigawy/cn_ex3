@@ -13,36 +13,34 @@
 #include <time.h>
 #include <sys/time.h>
 
-#define RECEIVER_IP_ADDRESS "127.0.0.1"
-#define RECEIVER_PORT 8888 // TODO receive this details from user
-
 char *reno = "reno";
 char *cubic = "cubic";
 char *algoritm;
 
 typedef struct
 {
-    double *data;
+    double *times;
+    double *speeds;
     int size;
     int capacity;
 } DynamicArray;
 
-void AddToDArr(DynamicArray *arr, double value)
+void AddToDArr(DynamicArray *arr, double time, double speed)
 {
     if (arr->size >= arr->capacity)
     {
         arr->capacity *= 2;
-        arr->data = (double *)realloc(arr->data, arr->capacity * sizeof(double));
+        arr->times = (double *)realloc(arr->times, arr->capacity * sizeof(double));
+        arr->speeds = (double *)realloc(arr->speeds, arr->capacity * sizeof(double));
     }
-    arr->data[arr->size] = value;
+    arr->times[arr->size] = time;
+    arr->speeds[arr->size] = speed;
     arr->size++;
 }
 void free_arr(DynamicArray *arr)
 {
-    for (size_t i = 0; i < arr->size; i++)
-    {
-        free(arr->data);
-    }
+    free(arr->speeds);
+    free(arr->times);
     free(arr);
 }
 /**
@@ -98,42 +96,63 @@ void renoOrCubic(int my_sock, char *rOc)
 }
 
 /**
- * This func calculates and prints requaired data about the times that the receiver saved during his connection with the sender.
+ * This func calculates and prints requaired times about the times that the receiver saved during his connection with the sender.
  * times: array of the saved times, one cell for every time that the sender sended the information.
  * numOfSends: the number of sends that the senders sended the information
  * fSize: the size of the sended file
  */
 void print_times(DynamicArray *arr, double fSize)
 {
-    double sum = 0;
+    double times_sum = 0;
     double avg = 0;
-    double bitrate;
+    double bandwidth = 0;
+    double speeds_sum = 0;
     printf("* statistics: *\n");
     for (size_t i = 0; i < arr->size; i++)
     {
-        sum += arr->data[i];
-        printf("Run #%zu Data: Time=%fms, Speed=%f MB/s\n", i + 1, arr->data[i], 0.0); // TODO- calculate the speed
+        times_sum += arr->times[i];
+        speeds_sum += arr->speeds[i];
+        printf("Run #%zu Data: Time=%fms, Speed=%f MB/s\n", i + 1, arr->times[i], arr->speeds[i]);
     }
     if (arr->size > 0)
     {
-        avg = (sum / (double)arr->size);
+        avg = (times_sum / (double)arr->size);
+        bandwidth = (speeds_sum / (double)arr->size);
     }
 
-    bitrate = ((fSize / 1024) / ((avg) / 1000));
-    printf("Average time: %0.3lf ms\n", avg); // TODO- calculate and print the bandwith
+    printf("Average time: %0.3lf ms\n", avg);
+    printf("Average speed: %0.3lf ms\n", bandwidth);
 }
+
+int byteToMegabyte(int bytes)
+{
+    return bytes / (1024 * 1024);
+}
+
 /**
  *
  */
 int main(int argc, char *argv[])
 {
+    int RECEIVER_PORT;
+    for (size_t i = 0; i < argc; i++)
+    {
+        if (!strcmp(argv[i], "-p"))
+        {
+            RECEIVER_PORT = atoi(argv[i + 1]);
+        }
+        if (!strcmp(argv[i], "-algo"))
+        {
+            algoritm = argv[i + 1];
+        }
+    }
     char *FIN = "I would like to end the connection please";
-    algoritm = argv[1];
     signal(SIGPIPE, SIG_IGN); // on linux to prevent crash on closing socket
     DynamicArray *times_arr = malloc(sizeof(DynamicArray));
     times_arr->size = 0;
     times_arr->capacity = 1;
-    times_arr->data = (double *)malloc(sizeof(double));
+    times_arr->times = (double *)malloc(sizeof(double));
+    times_arr->speeds = (double *)malloc(sizeof(double));
     printf("Starting up reciever\n");
 
     int listeningSocket = -1;
@@ -213,7 +232,6 @@ int main(int argc, char *argv[])
         memset(buff, 0, fSize);
         while (received != fSize && strcmp(buff, FIN) != 0)
         {
-
             receivedPart = getInformation(senderSocket, buff, fSize - received);
 
             if (!receivedPart)
@@ -229,7 +247,7 @@ int main(int argc, char *argv[])
 
             received += receivedPart;
         }
-        if(strcmp(buff, FIN) == 0)
+        if (strcmp(buff, FIN) == 0)
         {
             break;
         }
@@ -240,8 +258,9 @@ int main(int argc, char *argv[])
         {
             break;
         }
-        printf("reached to line 239");
-        AddToDArr(times_arr, (double)(end - begin) / CLOCKS_PER_SEC);
+        int mb = byteToMegabyte(received);
+        double t = ((double)(end - begin) / CLOCKS_PER_SEC);
+        AddToDArr(times_arr, t, mb / (t / 1000));
 
     } while (strcmp(buff, FIN) != 0);
     printf("Receiver closing the connection...\n");
@@ -253,6 +272,6 @@ int main(int argc, char *argv[])
     return 0;
 
     // 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
-    // git remote set-url origin https://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github.com/Oriya-Sigawy/cn_ex3.git
+    // git remote set-url origin https://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g@github.com/Oriya-Sigawy/cn_ex3.git
     // https://github.com/Oriya-Sigawy/cn_ex3
 }
