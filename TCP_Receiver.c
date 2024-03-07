@@ -1,3 +1,6 @@
+/**
+ * this file represents a receiver that receive files from the sender
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -13,11 +16,19 @@
 #include <time.h>
 #include <sys/time.h>
 
+//two options of congestion control algoritms
 char *reno = "reno";
 char *cubic = "cubic";
-char *algoritm;
+char *algoritm;     //represents the algoritm we are using
 
-typedef struct
+/*
+this is a struct for 2 arrays in a dynamic size.
+times- array that save in every cell i the sending time in send i+1
+speeds- array that save in every cell i the sending speed in send i+1
+size- number of sends (full cells)
+capacity- number of cells in every array (including the one we hav'nt used yet)
+*/
+typedef struct  
 {
     double *times;
     double *speeds;
@@ -25,24 +36,37 @@ typedef struct
     int capacity;
 } DynamicArray;
 
-void AddToDArr(DynamicArray *arr, double time, double speed)
+/**
+ * this func is used to add data to the speeds and times arrays
+ * the func checks if the size of darr is  equal to its capacity (meaning that the arrays are full). 
+ *  if it is, the func doubles the capacity and add the data, and if it isn't, the func just add the data.
+ * 
+ * darr- variable of type dynamicArray (the struct above) 
+ * time- the data we want to add to darr's times array
+ * speed- the data we want to add to darr's speeds array
+*/
+void AddToDArr(DynamicArray *darr, double time, double speed)
 {
-    if (arr->size >= arr->capacity)
+    if (darr->size >= darr->capacity)
     {
-        arr->capacity *= 2;
-        arr->times = (double *)realloc(arr->times, arr->capacity * sizeof(double));
-        arr->speeds = (double *)realloc(arr->speeds, arr->capacity * sizeof(double));
+        darr->capacity *= 2;
+        darr->times = (double *)realloc(darr->times, darr->capacity * sizeof(double));
+        darr->speeds = (double *)realloc(darr->speeds, darr->capacity * sizeof(double));
     }
-    arr->times[arr->size] = time;
-    arr->speeds[arr->size] = speed;
-    arr->size++;
+    darr->times[darr->size] = time;
+    darr->speeds[darr->size] = speed;
+    darr->size++;
 }
+/*
+this func frees all the memory was used for the dynamic array.
+*/
 void free_arr(DynamicArray *arr)
 {
     free(arr->speeds);
     free(arr->times);
     free(arr);
 }
+
 /**
  *  This func gets the information from the sender.
  *  sender_sock: the sender's socket descriptor (representing the socket's endpoint)
@@ -124,18 +148,22 @@ void print_times(DynamicArray *arr, double fSize)
     printf("Average speed: %0.3lf ms\n", bandwidth);
 }
 
+/**
+ * this func converts bytes to mega bytes
+ * bytes: number of bytes to convert
+ * returns: number of bytes in mega bytes 
+*/
 int byteToMegabyte(int bytes)
 {
     return bytes / (1024 * 1024);
 }
 
-/**
- *
- */
+
 int main(int argc, char *argv[])
 {
+    //save the receiver PORT
     int RECEIVER_PORT;
-    for (size_t i = 0; i < argc; i++)
+    for (size_t i = 0; i < argc; i++)       // //this loop receives the receiver ip, port, and the cc algoritm from the user
     {
         if (!strcmp(argv[i], "-p"))
         {
@@ -146,15 +174,18 @@ int main(int argc, char *argv[])
             algoritm = argv[i + 1];
         }
     }
-    char *FIN = "I would like to end the connection please";
+    char *FIN = "I would like to end the connection please";     //massage to end the connection between the receiver and the sender
     signal(SIGPIPE, SIG_IGN); // on linux to prevent crash on closing socket
+    //create dynamicArray for this connection
     DynamicArray *times_arr = malloc(sizeof(DynamicArray));
-    times_arr->size = 0;
-    times_arr->capacity = 1;
+    times_arr->size = 0;    //no data exists yet
+    times_arr->capacity = 1;    //ready to get one set of data (time and speed), will be increased if necessary
     times_arr->times = (double *)malloc(sizeof(double));
     times_arr->speeds = (double *)malloc(sizeof(double));
+
     printf("Starting up reciever\n");
 
+    //create the listening socket
     int listeningSocket = -1;
 
     if ((listeningSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1)
@@ -162,14 +193,12 @@ int main(int argc, char *argv[])
         perror("socket");
     }
 
-    // Reuse the address if the server socket on was closed and remains for 45 seconds in TIME-WAIT state till the final removal.
-    int enableReuse = 1;
+    int enableReuse = 1;        // Reuse the address 
     if (setsockopt(listeningSocket, SOL_SOCKET, SO_REUSEADDR, &enableReuse, sizeof(int)) < 0)
     {
         perror("setsockopt");
     }
 
-    // "sockaddr_in" is the "derived" from sockaddr structure used for IPv4 communication. For IPv6, use sockaddr_in6
     printf("Creating the receiver socket...\n");
     struct sockaddr_in receiverAddress;
     memset(&receiverAddress, 0, sizeof(receiverAddress));
@@ -197,10 +226,12 @@ int main(int argc, char *argv[])
 
     // Accept and incoming connection
     printf("Waiting for incoming TCP-connections...\n");
+    
     struct sockaddr_in senderAddress;
     socklen_t senderAddressLen = sizeof(senderAddress);
     memset(&senderAddress, 0, sizeof(senderAddress));
     senderAddressLen = sizeof(senderAddress);
+    //create a socket for our sender by accepting the connection using the listening socket
     int senderSocket = accept(listeningSocket, (struct sockaddr *)&senderAddress, &senderAddressLen);
     if (senderSocket == -1)
     {
@@ -209,69 +240,74 @@ int main(int argc, char *argv[])
         close(senderSocket);
         return -1;
     }
-    char *buff = NULL;
-    int fSize = 0;
-    int received = 0;
+    char *buff = NULL;  //to save the sender's info file
+    int fSize = 0;      //saves size of the sender's info file
+    int received = 0;   //saves how many bytes were received from the sender
+
     printf("Sender connected, receiving the file's size...\n");
-    getInformation(senderSocket, &fSize, sizeof(int));
+    getInformation(senderSocket, &fSize, sizeof(int));  //gets the size of the sender's info file
     printf("received size successfuly\n");
+
+    //prepering buff to receive the data
     buff = malloc(fSize * sizeof(char));
     if (buff == NULL)
     {
         printf("malloc failed\n");
         exit(1);
     }
+    //to calculate the send time
     clock_t begin;
     clock_t end;
     do
     {
         printf("getting the file info...\n");
         received = 0;
-        int receivedPart;
-        begin = clock();
+        int receivedPart;   //the info may come in segments, save the num of bytes received in every segment
+        begin = clock();    //start measure the time
         memset(buff, 0, fSize);
-        while (received != fSize && strcmp(buff, FIN) != 0)
+        while (received != fSize && strcmp(buff, FIN) != 0) //check if the intire file received or if received a FIN massage from the user
         {
-            receivedPart = getInformation(senderSocket, buff, fSize - received);
+            receivedPart = getInformation(senderSocket, buff, fSize - received);    //receive the data
 
-            if (!receivedPart)
+            if (!receivedPart)  //connection is close
             {
+                printf("ERROR! connection is close");
                 break;
             }
 
-            if (receivedPart < 0)
+            if (receivedPart < 0)   //receive failed
             {
-                printf("ERROR! connection is close");
-                return 1;
+                 return 1;
             }
 
             received += receivedPart;
         }
-        if (strcmp(buff, FIN) == 0)
+        if (strcmp(buff, FIN) == 0) //check if received the FIN massage
         {
             break;
         }
-        end = clock();
+        end = clock();  //stop measure the time
         printf("File transfer complete\n");
 
         if (!receivedPart)
         {
             break;
         }
-        int mb = byteToMegabyte(received);
+        //save the calculations on our dynamicArr
+        int mb = byteToMegabyte(received);  
         double t = ((double)(end - begin) / CLOCKS_PER_SEC);
         AddToDArr(times_arr, t, mb / (t / 1000));
 
     } while (strcmp(buff, FIN) != 0);
+
     printf("Receiver closing the connection...\n");
+    //close the sockets
     close(listeningSocket);
     close(senderSocket);
+    //print the calculations
     print_times(times_arr, fSize);
+    //freeing the using memory
     free(buff);
     free_arr(times_arr);
     return 0;
-
-    // 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
-    // git remote set-url origin https://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g@github.com/Oriya-Sigawy/cn_ex3.git
-    // https://github.com/Oriya-Sigawy/cn_ex3
 }

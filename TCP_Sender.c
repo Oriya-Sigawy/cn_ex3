@@ -1,3 +1,7 @@
+/**
+ * this file represents a sender that sends files to the receiver over TCP
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -11,11 +15,18 @@
 #include <unistd.h>
 #include <signal.h>
 
-char *fileName = "file to send";
+char *fileName = "file to send";            //name of the sending file
+
+//two options of congestion control algoritms
 char *reno = "reno";
 char *cubic = "cubic";
-char *algoritm;
+char *algoritm;     //represents the algoritm we are using
 
+/**
+ * this func was givven in the assignment, it creates a file of random data.
+ * size: the desired size of the file
+ * returns: buffer of the random data in the desired size
+*/
 char *util_generate_random_data(unsigned int size)
 {
     char *buffer = NULL;
@@ -62,12 +73,16 @@ void renoOrCubic(int my_sock, char *renoOrCubic)
     }
 }
 
+
 int main(int argc, char *argv[])
 {
-    char *RECEIVER_IP_ADDRESS;
+    //save the receiver details; IP and PORT
+    char *RECEIVER_IP_ADDRESS;      
     int RECEIVER_PORT;
-    char *FIN = "I would like to end the connection please";
-    for (size_t i = 0; i < argc; i++)
+
+    char *FIN = "I would like to end the connection please";        //massage to end the connection between the receiver and the sender
+
+    for (size_t i = 0; i < argc; i++)               //this loop receives the receiver ip, port, and the cc algoritm from the user
     {
         if (!strcmp(argv[i], "-p"))
         {
@@ -84,16 +99,17 @@ int main(int argc, char *argv[])
     }
 
     printf("Creating the socket...\n");
+    //defines the receiver socket
     struct sockaddr_in receiverAddress;
     memset(&receiverAddress, 0, sizeof(receiverAddress));
 
-    receiverAddress.sin_family = AF_INET;
-    receiverAddress.sin_port = htons(RECEIVER_PORT);
+    receiverAddress.sin_family = AF_INET;       //ipv4
+    receiverAddress.sin_port = htons(RECEIVER_PORT);    //receiver port
     socklen_t algo_len = strlen(algoritm);
 
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    setsockopt(sock, IPPROTO_TCP, TCP_CONGESTION, algoritm, algo_len);
-    int rval = inet_pton(AF_INET, (const char *)RECEIVER_IP_ADDRESS, &receiverAddress.sin_addr);
+    int sock = socket(AF_INET, SOCK_STREAM, 0);         //creating the socket over TCP
+    setsockopt(sock, IPPROTO_TCP, TCP_CONGESTION, algoritm, algo_len);  
+    int rval = inet_pton(AF_INET, (const char *)RECEIVER_IP_ADDRESS, &receiverAddress.sin_addr);    
     if (rval <= 0)
     {
         perror("inet_pton");
@@ -102,14 +118,13 @@ int main(int argc, char *argv[])
 
     printf("connecting to %s:%d...\n", RECEIVER_IP_ADDRESS, RECEIVER_PORT);
 
-    if (connect(sock, (struct sockaddr *)&receiverAddress, sizeof(receiverAddress)) == -1)
+    if (connect(sock, (struct sockaddr *)&receiverAddress, sizeof(receiverAddress)) == -1)  //connecting to receiver
     {
         perror("connect()");
     }
 
     printf("connected to receiver\n");
-
-    unsigned int size = 2048 * 1024;
+    unsigned int size = 2048 * 1024;    //size required in the assignment
     char *fileInfo = util_generate_random_data(size);
     if (fileInfo == NULL)
     {
@@ -117,13 +132,14 @@ int main(int argc, char *argv[])
         return -1;
     }
     printf("file of random data created successfuly\n sending the file's size\n");
-    send(sock, &size, sizeof(int), 0);
-    char choise;
-    int bytesSent;
+    send(sock, &size, sizeof(int), 0);  //send the file size to receiver
+    
+    char choise;        //saves the user's choise for sending the file again
+    int bytesSent;      //num of the bytes that sent to the receiver
     do
     {
-        bytesSent = send(sock, fileInfo, size, 0);
-        if (-1 == bytesSent)
+        bytesSent = send(sock, fileInfo, size, 0);  //sending the file
+        if (-1 == bytesSent)    
         {
             perror("send()");
         }
@@ -139,8 +155,8 @@ int main(int argc, char *argv[])
         {
             printf("message was successfully sent .\n");
         }
-        printf("do you want me to send the file again?\n press y for yes, n for no\n");
-        choise = getchar();
+        printf("do you want me to send the file again?\n press y for yes, n for no\n");     // ask for the user's choise
+        choise = getchar();     //receive the user's choise
         while (choise != 'n' && choise != 'y')
         {
             choise = getchar();
