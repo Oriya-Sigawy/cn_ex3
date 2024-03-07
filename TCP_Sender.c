@@ -121,6 +121,7 @@ int main(int argc, char *argv[])
     if (connect(sock, (struct sockaddr *)&receiverAddress, sizeof(receiverAddress)) == -1)  //connecting to receiver
     {
         perror("connect()");
+        return 1;
     }
 
     printf("connected to receiver\n");
