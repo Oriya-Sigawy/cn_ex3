@@ -295,8 +295,8 @@ int main(int argc, char *argv[])
         }
         //save the calculations on our dynamicArr
         int mb = byteToMegabyte(received);  
-        double t = ((double)(end - begin) / CLOCKS_PER_SEC);
-        AddToDArr(times_arr, t, mb / (t / 1000));
+        double t_in_s = ((double)(end - begin) / CLOCKS_PER_SEC);
+        AddToDArr(times_arr, t_in_s * 1000, mb / t_in_s);
 
     } while (strcmp(buff, FIN) != 0);
 
