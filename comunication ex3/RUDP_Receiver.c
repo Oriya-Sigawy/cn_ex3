@@ -1,150 +1,193 @@
-#include <arpa/inet.h>  // For the in_addr structure and the inet_pton function
-#include <stdbool.h>    // For the boolean signs flags
+#include <arpa/inet.h> // For the in_addr structure and the inet_pton function
+#include <stdbool.h>   // For the boolean signs flags
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>      // For the memset function
-#include <sys/socket.h>  // For the socket function
-#include <sys/time.h>    // For tv struct
+#include <string.h>     // For the memset function
+#include <sys/socket.h> // For the socket function
+#include <sys/time.h>   // For tv struct
 #include <time.h>
-#include <unistd.h>  // For the close function
-
+#include <unistd.h> // For the close function
 #include "RUDP_API.h"
 
-#define PORT 5061  // may be changed, temporary port for now
+#define SIZE_DATA 2097152
 
-#define SIZE_DATA 2097152  // need to be changed to 2mb
+/*
+this is a struct for 2 arrays in a dynamic size.
+times- array that save in every cell i the sending time in send i+1
+speeds- array that save in every cell i the sending speed in send i+1
+size- number of sends (full cells)
+capacity- number of cells in every array (including the one we hav'nt used yet)
+*/
+typedef struct
+{
+  double *times;
+  double *speeds;
+  int size;
+  int capacity;
+} DynamicArray;
 
-/***Will act as an server***/
+/**
+ * this func is used to add data to the speeds and times arrays
+ * the func checks if the size of darr is  equal to its capacity (meaning that the arrays are full).
+ *  if it is, the func doubles the capacity and add the data, and if it isn't, the func just add the data.
+ *
+ * darr- variable of type dynamicArray (the struct above)
+ * time- the data we want to add to darr's times array
+ * speed- the data we want to add to darr's speeds array
+ */
+void AddToDArr(DynamicArray *darr, double time, double speed)
+{
+  if (darr->size >= darr->capacity)
+  {
+    darr->capacity *= 2;
+    darr->times = (double *)realloc(darr->times, darr->capacity * sizeof(double));
+    darr->speeds = (double *)realloc(darr->speeds, darr->capacity * sizeof(double));
+  }
+  darr->times[darr->size] = time;
+  darr->speeds[darr->size] = speed;
+  darr->size++;
+}
+/*
+this func frees all the memory was used for the dynamic array.
+*/
+void free_arr(DynamicArray *arr)
+{
+  free(arr->speeds);
+  free(arr->times);
+  free(arr);
+}
 
-int main(int argc, char *argv[]) {
-  // Checking if the command is right
-  if (argc != 3 || strcmp(argv[1], "-p") != 0) {
-    printf("Incorrect command input\n");
+/**
+ * This func calculates and prints requaired times about the times that the receiver saved during his connection with the sender.
+ * times: array of the saved times, one cell for every time that the sender sended the information.
+ * numOfSends: the number of sends that the senders sended the information
+ * fSize: the size of the sended file
+ */
+void print_times(DynamicArray *arr)
+{
+  double times_sum = 0;
+  double avg = 0;
+  double bandwidth = 0;
+  double speeds_sum = 0;
+  printf("* statistics: *\n");
+  for (int i = 0; i < arr->size; i++)
+  {
+    times_sum += arr->times[i];
+    speeds_sum += arr->speeds[i];
+    printf("Run #%d Data: Time=%fms, Speed=%f MB/s\n", i + 1, arr->times[i], arr->speeds[i]);
+  }
+  if (arr->size > 0)
+  {
+    avg = (times_sum / (double)arr->size);
+    bandwidth = (speeds_sum / (double)arr->size);
   }
 
-  printf("Start receiver\n");
-  int port = atoi(argv[2]);  // according to the format it's supposed to have
-                             // there the port number
+  printf("Average time: %0.3lf ms\n", avg);
+  printf("Average speed: %0.3lf ms\n", bandwidth);
+}
 
+/**
+ * this func converts bytes to mega bytes
+ * bytes: number of bytes to convert
+ * returns: number of bytes in mega bytes
+ */
+int byteToMegabyte(int bytes)
+{
+  return bytes / (1024 * 1024);
+}
+
+int main(int argc, char *argv[])
+{
+  // save the receiver PORT
+  int RECEIVER_PORT;
+  for (int i = 0; i < argc; i++) // //this loop receives the receiver port
+  {
+    if (!strcmp(argv[i], "-p"))
+    {
+      RECEIVER_PORT = atoi(argv[i + 1]);
+    }
+  }
+  // create dynamicArray for this connection
+  DynamicArray *times_arr = malloc(sizeof(DynamicArray));
+  times_arr->size = 0;     // no data exists yet
+  times_arr->capacity = 1; // ready to get one set of data (time and speed), will be increased if necessary
+  times_arr->times = (double *)malloc(sizeof(double));
+  times_arr->speeds = (double *)malloc(sizeof(double));
+
+  printf("Starting up reciever\n");
   int socket = rudp_socket();
-  if (socket == -1) {
-    printf("Socket couldn't be created\n");
-    return -1;
-  }
+  int receive_state = rudp_get_con(socket, RECEIVER_PORT); // getting the connection
 
-  printf("Socket has been created succeesfuly!\n");
-  printf("waitnig for RUDP connection...\n");
-
-  int receive_state = rudp_get_con(socket, port);  // getting the connection
-
-  if (receive_state == 0) {
+  if (receive_state == 0)
+  {
     printf("Couldn't get a connection\n");
     return -1;
   }
-
-  printf("Connection request received\n");
-
-  /*
-   opening a file to keep the data instead of a dynamic array that needs to be
-   reallocated all the time Opens a file in read and write mode. It creates a
-   new file if it does not exist, if it exists, it erases the contents of the
-   file and the file pointer starts from the beginning.
-  */
-  FILE *data_file = fopen("stats", "w+");
-  if (data_file == NULL) {
-    printf("Error opening the file\n");
-    return 1;  // error
-  }
-
-  printf("Sender connected and data is received to a file\n");
-
-  fprintf(data_file, "\n\n --------------- Stats -------------\n");
-  double avgTime = 0;
-  double avgSpeed = 0;
-  clock_t start, finish;
-
-  char *recv_data = NULL;
-  int data_len = 0;
-  char total_size[SIZE_DATA] = {0};  // 2mb, and initializing the array with 0
-
-  receive_state = 0;
-  int run = 1;
-
-  start = clock();  // opening the clock
-  finish = clock();
-
-  do {
-    receive_state =
-        rudp_receive(socket, &recv_data, &data_len);  // receive value
-
-    if (receive_state == -5)  // means sender closed the connection
-    {
-      break;
-    }
-
-    else if (receive_state == -1) {
-      printf("Error receiving the data");
-      return -1;
-    }
-
-    else if (receive_state == 1 &&
-             start < finish)  // got the data in the fiest one,
-                              // starting the timer again
-    {
-      start = clock();  // getting the time again
-    }
-
-    else if (receive_state == 1) {
-      strcat(total_size, recv_data); /* Append SRC onto DEST.  */
-    }
-
-    else if (receive_state == 5) {
-      strcat(total_size, recv_data);
-      printf("received total: %zu\n", sizeof(total_size));
-
-      finish = clock();  // getting the time to calculate the time for stats
-      double how_long = ((double)(finish - start)) / CLOCKS_PER_SEC;
-      avgTime += how_long;
-
-      double speed = 2 / how_long;
-      avgSpeed += speed;
-
-      fprintf(data_file, "Run #%d Data: Time=%f sec' Speed=%f MB/s\n", run,
-              how_long, speed);
-
-      memset(total_size, 0,
-             sizeof(total_size));  // reseting it for the next income data
-      run++;                       // incrementing the run counter
-    }
-  } while (receive_state >= 0);
-
-  printf("closing connection!\n");
-
-  // adding to our data file more stats
-  fprintf(data_file, "\n");
-  fprintf(data_file, "Average time: %f sec'\n", avgTime / (run - 1));
-  fprintf(data_file, "Average speed: %f MB/sec'\n", avgSpeed / (run - 1));
-
-  fprintf(data_file,
-          "\n\n----------------------------------\n");  // for ending like in
-                                                        // the exmple
-
-  rewind(data_file);  // setting the pointer to the begining of the file,
-                      // to print know the data to the user from the file.
-
-  char buffer[100];  // buffer for getting the text from the file and printing
-                     // it to the user
-
-  while (fgets(buffer, 100, data_file) !=
-         NULL)  // while it is not the end of the file aka EOF
+  if (receive_state == -1)
   {
-    printf("%s", buffer);
+    close(socket);
+    return -1;
   }
+  int senderSocket = rudp_socket();
+  if (senderSocket == -1)
+  {
+    perror("creating socket");
+    close(senderSocket);
+    return -1;
+  }
+  char *buff = NULL; // to save the sender's info file
 
-  // closing the file and deleting it
-  fclose(data_file);
-  remove("stats");
+  printf("Sender connected, receiving the file's size...\n");
 
-  printf("Receiver end\n");
+  // prepering buff to receive the data
+  buff = malloc(sizeof(RUDP));
+  if (buff == NULL)
+  {
+    printf("malloc failed\n");
+    exit(1);
+  }
+  // to calculate the send time
+  clock_t start;
+  clock_t end;
+  do
+  {
+    printf("getting the file info...\n");
+    start = clock();      // start measure the time
+    memset(buff, 0, sizeof(RUDP));
+    int data_len = 0;
+    int received=0;
+    while (received<=SIZE_DATA) // check if the intire file received or if received a FIN massage from the user
+    {                                     // the info may come in segments, save the num of bytes received in every segment
+      receive_state = rudp_receive(socket, &buff, &data_len);
+      received+=data_len;
+
+      if (receive_state == -5) // means sender closed the connection
+      {
+        break;
+      }
+      else if (receive_state == -1)
+      {
+        printf("Error receiving the data\n");
+        close(socket);
+        return -1;
+      }
+
+    }
+    end = clock(); // stop measure the time
+    printf("File transfer complete\n");
+    // save the calculations on our dynamicArr
+    int mb = byteToMegabyte(received);
+    double t_in_s = ((double)(end - start) / CLOCKS_PER_SEC);
+    AddToDArr(times_arr, t_in_s * 1000, mb / t_in_s);
+  } while (receive_state != -5);
+
+  printf("Receiver closing the connection...\n");
+  // close the sockets
+  close(senderSocket);
+  // print the calculations
+  print_times(times_arr);
+  // freeing the using memory
+  free(buff);
+  free_arr(times_arr);
   return 0;
 }

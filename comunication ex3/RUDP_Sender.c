@@ -1,56 +1,65 @@
-#include <arpa/inet.h>  // For the in_addr structure and the inet_pton function
-#include <stdbool.h>    // For the boolean signs flags
+#include <arpa/inet.h> // For the in_addr structure and the inet_pton function
+#include <stdbool.h>   // For the boolean signs flags
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>      // For the memset function
-#include <sys/socket.h>  // For the socket function
-#include <sys/time.h>    // For tv struct
+#include <string.h>     // For the memset function
+#include <sys/socket.h> // For the socket function
+#include <sys/time.h>   // For tv struct
 #include <time.h>
-#include <unistd.h>  // For the close function
+#include <unistd.h> // For the close function
 
 #include "RUDP_API.h"
 
-#define PORT 5061  // may be changed, temporary port for now
-#define SERVER_IP "127.0.0.1"
-#define DATA_SIZE 2097152  // 2mb
+#define DATA_SIZE 2097152 // 2mb
 
-/***Will act as an client***/
-
-int parse_info(int argc, char *argv[], char **ip, int *port);
-int parse_port(char *port);
 int connection(char *ip, int port);
-char *util_generate_random_data(
-    unsigned int size);  // their function for generating data
+char *util_generate_random_data(unsigned int size);
 
-int main(int argc, char *argv[]) {
-  char *ip;
-  int port;
+int main(int argc, char *argv[])
+{
+  char *RECEIVER_IP_ADDRESS;
+  int RECEIVER_PORT;
 
-  if (!parse_info(argc, argv, &ip, &port)) {
-    return 1;  // in main 1 means jumping out from the program, didn't succeed
+  for (int i = 0; i < argc; i++) // this loop receives the sender ip, port
+  {
+    if (!strcmp(argv[i], "-p"))
+    {
+      RECEIVER_PORT = atoi(argv[i + 1]);
+    }
+    if (!strcmp(argv[i], "-ip"))
+    {
+      RECEIVER_IP_ADDRESS = argv[i + 1];
+    }
   }
+  char *random_data = util_generate_random_data(DATA_SIZE); // generating 2mb data
 
-  char *random_data =
-      util_generate_random_data(DATA_SIZE);  // generating 2mb data
+  int socket = connection(RECEIVER_IP_ADDRESS, RECEIVER_PORT);
 
-  int socket = connection(ip, port);
-
-  if (socket == -1) {
-    return 1;  // faild to create the socket
+  if (socket == -1)
+  {
+    return 1; // faild to create the socket
   }
 
   char choice;
+  int byteSent;
 
-  do {
+  do
+  {
     printf("sending the file...\n");
-    if (rudp_send(socket, random_data, DATA_SIZE) < 0) {
+    byteSent = rudp_send(socket, random_data, DATA_SIZE);
+    if (byteSent == 0)
+    {
       printf("Error sending the data...\n");
-      rudp_close(socket);  // closing the connection
+      rudp_close(socket);
       return 1;
     }
-    printf("Do you want to send it again? (y/n): \n");
-    scanf(" %c", &choice);  // The space before %c is to skip the white spaces
-  } while (choice == 'y');
+    printf("file was successfuly sent.\n Do you want to send it again? (y/n): \n");
+    choice = getchar(); // receive the user's choise
+    while (choice != 'n' && choice != 'y')
+    {
+      choice = getchar();
+    }
+  } while (choice != 'n');
 
   printf("Closing the connection...\n");
   rudp_close(socket);
@@ -61,54 +70,31 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-int connection(char *ip, int port) {
-  int socket = rudp_socket();  // creating the socket
-  if (socket == -1) {
-    return -1;  // returning error
+int connection(char *ip, int port)
+{
+  int socket = rudp_socket(); // creating the socket
+  if (socket == -1)
+  {
+    return -1; // returning error
   }
-  if (rudp_connect(socket, ip, port) <= 0) {
+  if (rudp_connect(socket, ip, port) <= 0)
+  {
+    close(socket);
     return -1;
   }
   return socket;
 }
 
-int parse_port(char *port) {
-  char *endpoint;
-  long int portNumer =
-      strtol(port, &endpoint, 10); /* Convert a string to a long integer.  */
-
-  if (*endpoint != '\0' || portNumer < 0 ||
-      portNumer > 65535) {  // if the end of the string is not '\0',
-                            // or the port number is to big or negative,
-                            // means it's not between the range of port numbers
-    return -1;
-  }
-  return (int)portNumer;
-}
-
-// checkong the command input correctness
-int parse_info(int argc, char *argv[], char **ip, int *port) {
-  if (argc != 5 || strcmp(argv[1], "-ip") != 0 && strcmp(argv[3], "-p") != 0) {
-    printf("Invalid command input\n");
-    return 0;  // for failed
-  }
-
-  *ip = argv[2];
-  *port = parse_port(argv[4]);
-  if (*port == -1) {
-    printf("Invalid port\n");
-    return 0;  // for failed
-  }
-  return 1;  // success parsing the commant to ip address and port number
-}
-
-char *util_generate_random_data(unsigned int size) {
+char *util_generate_random_data(unsigned int size)
+{
   char *buffer = NULL;
   // Argument check.
-  if (size == 0) return NULL;
+  if (size == 0)
+    return NULL;
   buffer = (char *)calloc(size, sizeof(char));
   // Error checking.
-  if (buffer == NULL) return NULL;
+  if (buffer == NULL)
+    return NULL;
   // Randomize the seed of the random number generator.
   srand(time(NULL));
   for (unsigned int i = 0; i < size; i++)

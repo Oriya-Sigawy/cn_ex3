@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
     printf("file of random data created successfuly\n sending the file's size\n");
     send(sock, &size, sizeof(int), 0);  //send the file size to receiver
     
-    char choise;        //saves the user's choise for sending the file again
+    char choice;        //saves the user's choice for sending the file again
     int bytesSent;      //num of the bytes that sent to the receiver
     do
     {
@@ -156,14 +156,14 @@ int main(int argc, char *argv[])
         {
             printf("message was successfully sent .\n");
         }
-        printf("do you want me to send the file again?\n press y for yes, n for no\n");     // ask for the user's choise
-        choise = getchar();     //receive the user's choise
-        while (choise != 'n' && choise != 'y')
+        printf("do you want me to send the file again?\n press y for yes, n for no\n");     // ask for the user's choice
+        choice = getchar();     //receive the user's choice
+        while (choice != 'n' && choice != 'y')
         {
-            choise = getchar();
+            choice = getchar();
         }
 
-    } while (choise != 'n');
+    } while (choice != 'n');
 
     send(sock, FIN, strlen(FIN) + 1, 0);
     printf("Closing the connection...\n");

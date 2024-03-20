@@ -1,11 +1,11 @@
 CC = gcc
-CFLAG = -Wall -g
+CFLAGS = -Wall -Wextra -g
 AR = ar
 AFLAGS = rcs
 
 .PHONY: all clean
 
-all: RUDP_Sender RUDP_Receiver
+all: RUDP_Sender RUDP_Receiver 
 
 RUDP_Receiver: RUDP_Receiver.o RUDP_API.a
 	$(CC) $(CFLAGS) $^ -o $@
