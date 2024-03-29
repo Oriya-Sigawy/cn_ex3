@@ -128,16 +128,7 @@ int main(int argc, char *argv[])
     close(socket);
     return -1;
   }
-  int senderSocket = rudp_socket();
-  if (senderSocket == -1)
-  {
-    perror("creating socket");
-    close(senderSocket);
-    return -1;
-  }
   char *buff = NULL; // to save the sender's info file
-
-  printf("Sender connected, receiving the file's size...\n");
 
   // prepering buff to receive the data
   buff = malloc(sizeof(RUDP));
@@ -151,15 +142,15 @@ int main(int argc, char *argv[])
   clock_t end;
   do
   {
-    printf("getting the file info...\n");
-    start = clock();      // start measure the time
+    printf("getting the file data...\n");
+    start = clock(); // start measure the time
     memset(buff, 0, sizeof(RUDP));
     int data_len = 0;
-    int received=0;
-    while (received<=SIZE_DATA) // check if the intire file received or if received a FIN massage from the user
-    {                                     // the info may come in segments, save the num of bytes received in every segment
+    int received = 0;
+    while (received <= SIZE_DATA) // check if the intire file received or if received a FIN massage from the user
+    {                             // the info may come in segments, save the num of bytes received in every segment
       receive_state = rudp_receive(socket, &buff, &data_len);
-      received+=data_len;
+      received += data_len;
 
       if (receive_state == -5) // means sender closed the connection
       {
@@ -171,7 +162,10 @@ int main(int argc, char *argv[])
         close(socket);
         return -1;
       }
-
+    }
+    if (receive_state == -5) // means sender closed the connection
+    {
+      break;
     }
     end = clock(); // stop measure the time
     printf("File transfer complete\n");
@@ -182,8 +176,7 @@ int main(int argc, char *argv[])
   } while (receive_state != -5);
 
   printf("Receiver closing the connection...\n");
-  // close the sockets
-  close(senderSocket);
+  close(socket);
   // print the calculations
   print_times(times_arr);
   // freeing the using memory

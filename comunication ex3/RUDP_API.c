@@ -53,7 +53,7 @@ int rudp_socket()
 // only the sender use that func
 int rudp_connect(int socket, const char *ip, int port)
 {
-  if (set_time(socket, 30) == -1)
+  if (set_time(socket, 0.1) == -1)
   {
     return -1;
   }
@@ -78,7 +78,7 @@ int rudp_connect(int socket, const char *ip, int port)
     perror("Connection()");
     return -1;
   }
-  printf("connection succeed");
+  printf("connection succeed\n");
   RUDP *rudp = malloc(sizeof(RUDP)); // creating the struct and allocating memory for the data
   memset(rudp, 0, sizeof(RUDP));
   rudp->flags.isSynchronized = 1; // setting the syncronzie to 1
@@ -106,7 +106,7 @@ int rudp_connect(int socket, const char *ip, int port)
 
       if (get_data_res == -1) // means the we've failed getting the data
       {
-        perror("recvFrom()");
+        // perror("recvFrom()");
         // need to free both struct
         free(rudp);
         free(recv);
@@ -165,7 +165,7 @@ int rudp_get_con(int socket, int port)
 
   if (recv_length_bytes == -1)
   {
-    perror("recvfrom()");
+    // perror("recvfrom()");
     free(rudp);
     return -1;
   }
@@ -195,7 +195,7 @@ int rudp_get_con(int socket, int port)
       return -1;
     }
 
-    set_time(socket, 30);
+    // set_time(socket, 1);
     free(rudp);
     free(reply);
     return 1; // connection succeed
@@ -271,11 +271,10 @@ int rudp_receive(int socket, char **buffer, int *length)
   // initializing the rudp protocol packet income
   RUDP *rudp = malloc(sizeof(RUDP));
   memset(rudp, 0, sizeof(RUDP));
-  int recv_len = recvfrom(socket, rudp, sizeof(RUDP), 0, NULL, 0);
+  int recv_len = recv(socket, rudp, sizeof(RUDP), 0);
   if (recv_len == -1)
   {
-    printf("error in recv_len\n");
-    perror("recvfrom()");
+    // perror("recvfrom()");
     free(rudp);
     return -1;
   }
@@ -302,7 +301,7 @@ int rudp_receive(int socket, char **buffer, int *length)
   {
     if (rudp->sequalNum == 0 && rudp->flags.isDataPacket == 1)
     {
-      set_time(socket, 0.1);
+      set_time(socket, 5);
     }
     if (rudp->flags.finishFlag == 1 && rudp->flags.isDataPacket == 1) // means we handling the last packet now
     {
@@ -310,7 +309,7 @@ int rudp_receive(int socket, char **buffer, int *length)
       *length = rudp->dataLength;
       free(rudp);  // finished copying the last packet
       seq_num = 0; // reseting the sequal number for the next connection
-      set_time(socket, 0.1);
+      set_time(socket, 100);
       return 5; // returning a number for the end of the connection
     }
 
@@ -344,7 +343,7 @@ int rudp_receive(int socket, char **buffer, int *length)
     while ((time(NULL) - finish_time) < 1)
     {
       memset(rudp, 0, sizeof(RUDP));
-      recvfrom(socket, rudp, sizeof(RUDP), 0, NULL, 0);
+      recv(socket, rudp, sizeof(RUDP), 0);
       if (rudp->flags.finishFlag == 1)
       {
         if (send_acknowledgement(socket, rudp) == -1)
@@ -393,7 +392,7 @@ int set_time(int socket, double time)
   // Setting for the socket a timeout, using timeval struct
   struct timeval timeout;
   timeout.tv_sec = (int)time;
-  timeout.tv_usec = time-timeout.tv_sec;
+  timeout.tv_usec = (time - timeout.tv_sec) * 1e6;
 
   if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
   {
@@ -411,7 +410,7 @@ int wait_for_acknowledgement(int socket, int sequal_num, clock_t s)
     int length_recv = recv(socket, reply, sizeof(RUDP), 0);
     if (length_recv == -1)
     {
-      perror("recvfrom()");
+      // perror("recvfrom()");
       free(reply);
       return -1;
     }
