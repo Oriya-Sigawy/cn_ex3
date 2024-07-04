@@ -83,7 +83,7 @@ void print_times(DynamicArray *arr)
   }
 
   printf("Average time: %0.3lf ms\n", avg);
-  printf("Average speed: %0.3lf ms\n", bandwidth);
+  printf("Average speed: %0.3lf MB/s\n", bandwidth);
 }
 
 /**
